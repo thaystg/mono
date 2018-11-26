@@ -355,3 +355,7 @@
 ../../../external/corefx/src/System.IO/tests/TestDataProvider/TestDataProvider.cs
 ../../../external/corefx/src/Common/tests/System/IO/WrappedMemoryStream.cs
 ../../../external/corefx/src/System.IO/tests/BufferedStream/*.cs
+
+# System.IO.TextWriter/StreamWriter
+../../../external/corefx/src/System.IO/tests/TextReader/*.cs
+../../../external/corefx/src/System.IO/tests/StreamReader/*.cs
