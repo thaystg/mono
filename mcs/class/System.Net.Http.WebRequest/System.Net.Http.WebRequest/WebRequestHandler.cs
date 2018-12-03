@@ -141,6 +141,12 @@ namespace System.Net.Http
 			}
 		}
 
+		void EnsureModifiability ()
+		{
+			throw new PlatformNotSupportedException ();
+		}
+
+#if MARTIN_FIXME
 		internal override HttpWebRequest CreateWebRequest (HttpRequestMessage request)
 		{
 			HttpWebRequest wr = base.CreateWebRequest (request);
@@ -160,6 +166,7 @@ namespace System.Net.Http
 
 			return wr;
 		}
+#endif
 	}
 }
 
