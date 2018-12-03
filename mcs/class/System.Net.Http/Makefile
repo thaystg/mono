@@ -6,7 +6,7 @@ LIBRARY = System.Net.Http.dll
 
 LIB_REFS = System.Core System
 KEYFILE = ../msfinal.pub
-LIB_MCS_FLAGS = $(EXTRA_LIB_MCS_FLAGS)
+LIB_MCS_FLAGS = $(EXTRA_LIB_MCS_FLAGS) -unsafe -nowarn:436
 ifeq (monodroid,$(PROFILE))
 LIB_MCS_FLAGS += -d:XAMARIN_MODERN
 endif
