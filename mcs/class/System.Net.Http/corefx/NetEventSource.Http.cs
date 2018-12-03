@@ -5,6 +5,32 @@ namespace System.Net
 {
 	internal sealed partial class NetEventSource : EventSource
 	{
+		public static readonly NetEventSource Log = new NetEventSource ();
+
+		public static new bool IsEnabled => false;
+
+		public static void Associate (params object[] args)
+		{
+		}
+
+		[NonEvent]
+		public static void Error (params object[] args)
+		{
+		}
+
+		public static void Enter (params object[] args)
+		{
+
+		}
+
+		public static void Exit (params object[] args)
+		{
+		}
+
+		public static void Info (params object[] args)
+		{
+		}
+
 		[NonEvent]
 		public static void UriBaseAddress (object obj, Uri baseAddress)
 		{

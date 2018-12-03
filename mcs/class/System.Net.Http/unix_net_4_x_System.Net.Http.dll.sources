@@ -2,8 +2,9 @@ Assembly/AssemblyInfo.cs
 
 HttpClientHandler.Mono.cs
 
+../corlib/System.Diagnostics/Debug.cs
+
 corefx/NetEventSource.Http.cs
-../../../external/corefx/src/Common/src/System/Net/Logging/NetEventSource.Common.cs
 
 ../../../external/corefx/src/Common/src/System/Net/Http/HttpHandlerDefaults.cs
 
