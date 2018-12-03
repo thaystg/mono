@@ -294,7 +294,11 @@ XTEST_HARNESS_PATH := $(topdir)/../external/xunit-binaries
 XTEST_HARNESS = $(XTEST_HARNESS_PATH)/xunit.console.exe
 XTEST_RESULT_FILE := TestResult-$(PROFILE)-xunit.xml
 XTEST_HARNESS_FLAGS := -noappdomain -noshadow -parallel none -nunit $(XTEST_RESULT_FILE)
+ifdef OUTER_LOOP
+XTEST_TRAIT := -notrait category=failing -notrait category=nonmonotests -notrait Benchmark=true
+else
 XTEST_TRAIT := -notrait category=failing -notrait category=nonmonotests -notrait Benchmark=true -notrait category=outerloop
+endif
 # The logic is double inverted so this actually excludes tests not intented for current platform
 # best to search for `property name="category"` in the xml output to see what's going on
 # https://github.com/dotnet/buildtools/blob/master/src/xunit.netcore.extensions/Discoverers/PlatformSpecificDiscoverer.cs
@@ -314,6 +318,10 @@ ifdef COVERAGE
 XTEST_COVERAGE_FLAGS = -O=-aot --profile=coverage:output=$(topdir)/class/lib/$(PROFILE_DIRECTORY)/coverage_xunit_$(ASSEMBLY).xml
 endif
 
+ifdef DOTNET_URI
+XTEST_DOTNET_URI_FLAGS = MONO_URI_DOTNETRELATIVEORABSOLUTE=true
+endif
+
 check: run-xunit-test-local
 xunit-test-local: $(xtest_lib_output)
 run-xunit-test-local: run-xunit-test-lib
@@ -322,7 +330,7 @@ run-xunit-test-local: run-xunit-test-lib
 run-xunit-test-lib: xunit-test-local
 	@cp -rf $(XTEST_HARNESS_PATH)/xunit.execution.dotnet.dll $(test_lib_dir)/xunit.execution.dotnet.dll
 	ok=:; \
-	PATH="$(TEST_RUNTIME_WRAPPERS_PATH):$(PATH)" REMOTE_EXECUTOR="$(XTEST_REMOTE_EXECUTOR_ABSPATH)" $(TEST_RUNTIME) $(TEST_RUNTIME_FLAGS) $(XTEST_COVERAGE_FLAGS) $(AOT_RUN_FLAGS) $(XTEST_HARNESS) $(xtest_lib_output) $(XTEST_HARNESS_FLAGS) $(XTEST_TRAIT) $(XTEST_TRAIT_PLATFORM) || ok=false; \
+	PATH="$(TEST_RUNTIME_WRAPPERS_PATH):$(PATH)" REMOTE_EXECUTOR="$(XTEST_REMOTE_EXECUTOR_ABSPATH)" $(XTEST_DOTNET_URI_FLAGS) $(TEST_RUNTIME) $(TEST_RUNTIME_FLAGS) $(XTEST_COVERAGE_FLAGS) $(AOT_RUN_FLAGS) $(XTEST_HARNESS) $(xtest_lib_output) $(XTEST_HARNESS_FLAGS) $(XTEST_TRAIT) $(XTEST_TRAIT_PLATFORM) || ok=false; \
 	if [ -n "$$MONO_BABYSITTER_NUNIT_XML_LIST_FILE" ]; then echo "$(abspath $(XTEST_RESULT_FILE))" >> "$$MONO_BABYSITTER_NUNIT_XML_LIST_FILE"; fi; \
 	$$ok
 	@rm -f $(test_lib_dir)/xunit.execution.dotnet.dll
