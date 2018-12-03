@@ -1,3 +1,4 @@
+../corefx/Configuration.Certificates.cs
 ../corefx/Interop.VersionInfo.cs
 ../corefx/PlatformDetection.cs
 
@@ -18,7 +19,6 @@
 ../../../../external/corefx/src/Common/tests/System/Diagnostics/Tracing/ConsoleEventListener.cs
 ../../../../external/corefx/src/Common/tests/System/IO/DelegateStream.cs
 ../../../../external/corefx/src/Common/tests/System/Net/RemoteServerQuery.cs
-../../../../external/corefx/src/Common/tests/System/Net/Configuration.Certificates.cs
 ../../../../external/corefx/src/Common/tests/System/Net/EventSourceTestLogging.cs
 ../../../../external/corefx/src/Common/tests/System/Net/HttpsTestServer.cs
 ../../../../external/corefx/src/Common/tests/System/Net/Capability.Security.cs
