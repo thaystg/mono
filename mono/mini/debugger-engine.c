@@ -24,6 +24,9 @@
 static void mono_de_ss_start (SingleStepReq *ss_req, SingleStepArgs *ss_args);
 static gboolean mono_de_ss_update (SingleStepReq *req, MonoJitInfo *ji, SeqPoint *sp, void *tls, MonoContext *ctx, MonoMethod* method);
 
+#define PENDING_SS_UNITIALIZED 0
+#define PROCESSED_SS_REQUEST 1
+#define PENDING_SS_REQUEST 2
 
 static DebuggerEngineCallbacks rt_callbacks;
 
@@ -509,11 +512,12 @@ mono_de_clear_breakpoint (MonoBreakpoint *bp)
 }
 
 void
-mono_de_collect_breakpoints_by_sp (SeqPoint *sp, MonoJitInfo *ji, GPtrArray *ss_reqs, GPtrArray *bp_reqs)
+mono_de_collect_breakpoints_by_sp (SeqPoint *sp, MonoJitInfo *ji, GPtrArray *ss_reqs, GPtrArray *bp_reqs, MonoInternalThread *thread)
 {
 	for (int i = 0; i < breakpoints->len; ++i) {
 		MonoBreakpoint *bp = (MonoBreakpoint *)g_ptr_array_index (breakpoints, i);
-
+		if (bp->req->event_kind == EVENT_KIND_STEP && thread && ((SingleStepReq*)bp->req->info)->thread != thread)
+			continue;
 		if (!bp->method)
 			continue;
 
@@ -592,7 +596,25 @@ mono_de_clear_breakpoints_for_domain (MonoDomain *domain)
 static int ss_count;
 
 /* The single step request instance */
-static SingleStepReq *the_ss_req;
+static GHashTable *the_ss_reqs;
+
+static void
+ss_req_init (void)
+{
+	the_ss_reqs = g_hash_table_new (mono_aligned_addr_hash, NULL);
+}
+
+static void
+ss_req_cleanup (void)
+{
+	mono_loader_lock ();
+
+	g_hash_table_destroy (the_ss_reqs);
+
+	the_ss_reqs = NULL;
+
+	mono_loader_unlock ();
+}
 
 /*
  * mono_de_start_single_stepping:
@@ -716,13 +738,13 @@ ss_destroy (SingleStepReq *req)
 	g_free (req);
 }
 
-static SingleStepReq*
-ss_req_acquire (void)
+SingleStepReq*
+ss_req_acquire (MonoInternalThread *thread)
 {
 	SingleStepReq *req;
 
 	dbg_lock ();
-	req = the_ss_req;
+	req = g_hash_table_lookup (the_ss_reqs, thread);
 	if (req)
 		req->refcount ++;
 	dbg_unlock ();
@@ -730,7 +752,7 @@ ss_req_acquire (void)
 }
 
 static void
-mono_de_ss_req_release (SingleStepReq *req)
+mono_de_ss_req_release (SingleStepReq *req, gboolean with_free)
 {
 	gboolean free = FALSE;
 
@@ -739,20 +761,19 @@ mono_de_ss_req_release (SingleStepReq *req)
 	req->refcount --;
 	if (req->refcount == 0)
 		free = TRUE;
-	dbg_unlock ();
-	if (free) {
-		if (req == the_ss_req)
-			the_ss_req = NULL;
+	if (free && with_free) {
+		g_hash_table_remove(the_ss_reqs, req->thread);
 		ss_destroy (req);
 	}
+	dbg_unlock ();
+	
 }
 
 void
-mono_de_cancel_ss (void)
+mono_de_cancel_ss (SingleStepReq *req, gboolean with_free)
 {
-	if (the_ss_req) {
-		mono_de_ss_req_release (the_ss_req);
-		the_ss_req = NULL;
+	if (the_ss_reqs) {
+		mono_de_ss_req_release (req, with_free);
 	}
 }
 
@@ -780,7 +801,7 @@ mono_de_process_single_step (void *tls, gboolean from_signal)
 	/*
 	 * This can run concurrently with a clear_event_request () call, so needs locking/reference counts.
 	 */
-	ss_req = ss_req_acquire ();
+	ss_req = ss_req_acquire (mono_thread_internal_current ());
 
 	if (!ss_req)
 		// FIXME: A suspend race
@@ -878,7 +899,7 @@ mono_de_process_single_step (void *tls, gboolean from_signal)
 	rt_callbacks.process_breakpoint_events (bp_events, method, ctx, il_offset);
 
  exit:
-	mono_de_ss_req_release (ss_req);
+	mono_de_ss_req_release (ss_req, FALSE);
 }
 
 /*
@@ -1021,6 +1042,7 @@ mono_de_process_breakpoint (void *void_tls, gboolean from_signal)
 	MonoSeqPointInfo *info;
 	SeqPoint sp;
 	gboolean found_sp;
+	gboolean is_multithread_debug = FALSE;
 
 	if (rt_callbacks.try_process_suspend (tls, ctx))
 		return;
@@ -1061,7 +1083,7 @@ mono_de_process_breakpoint (void *void_tls, gboolean from_signal)
 
 	mono_debugger_log_bp_hit (tls, method, sp.il_offset);
 
-	mono_de_collect_breakpoints_by_sp (&sp, ji, ss_reqs_orig, bp_reqs);
+	mono_de_collect_breakpoints_by_sp (&sp, ji, ss_reqs_orig, bp_reqs, mono_thread_internal_current ());
 
 	if (bp_reqs->len == 0 && ss_reqs_orig->len == 0) {
 		/* Maybe a method entry/exit event */
@@ -1070,6 +1092,23 @@ mono_de_process_breakpoint (void *void_tls, gboolean from_signal)
 		else if (sp.il_offset == METHOD_EXIT_IL_OFFSET)
 			kind = EVENT_KIND_METHOD_EXIT;
 	}
+	if (ss_reqs_orig->len == 0) {
+		printf("\n[%p]Nao Achei - %x\n", (gpointer) (gsize) mono_native_thread_id_get (),sp.il_offset);
+		while (ss_reqs_orig->len == 0)
+		{
+			SingleStepReq * req = ss_req_acquire(mono_thread_internal_current ());
+			if (req)
+				printf("mas sei q tem req\n\n");
+			else
+				break;
+			mono_de_collect_breakpoints_by_sp (&sp, ji, ss_reqs_orig, bp_reqs, mono_thread_internal_current ());
+		}
+	}
+	else
+	{
+		printf("[%p]achei %x\n\n", (gpointer) (gsize) mono_native_thread_id_get (), sp.il_offset);
+	}
+	
 
 	/* Process single step requests */
 	for (i = 0; i < ss_reqs_orig->len; ++i) {
@@ -1084,7 +1123,7 @@ mono_de_process_breakpoint (void *void_tls, gboolean from_signal)
 			//We have different thread and we don't have async stepping in progress
 			//it's breakpoint in parallel thread, ignore it
 			if (ss_req->async_id == 0)
-				continue;
+				is_multithread_debug = TRUE;
 
 			rt_callbacks.ss_discard_frame_context (tls);
 			rt_callbacks.ss_calculate_framecount (tls, ctx, FALSE, &frames, &nframes);
@@ -1094,19 +1133,17 @@ mono_de_process_breakpoint (void *void_tls, gboolean from_signal)
 
 			//Check method is async before calling get_this_async_id
 			MonoDebugMethodAsyncInfo* asyncMethod = mono_debug_lookup_method_async_debug_info (method);
-			if (!asyncMethod)
-				continue;
-			else
+			if (asyncMethod)
 				mono_debug_free_method_async_debug_info (asyncMethod);
 
 			//breakpoint was hit in parallelly executing async method, ignore it
-			if (ss_req->async_id != rt_callbacks.get_this_async_id (frames [0]))
+			if (ss_req->async_id != 0 && ss_req->async_id != rt_callbacks.get_this_async_id (frames [0]))
 				continue;
 		}
 
 		//Update stepping request to new thread/frame_count that we are continuing on
 		//so continuing with normal stepping works as expected
-		if (ss_req->async_stepout_method || ss_req->async_id) {
+		if (ss_req->async_stepout_method || ss_req->async_id || is_multithread_debug) {
 			int nframes;
 			rt_callbacks.ss_discard_frame_context (tls);
 			rt_callbacks.ss_calculate_framecount (tls, ctx, FALSE, NULL, &nframes);
@@ -1115,8 +1152,10 @@ mono_de_process_breakpoint (void *void_tls, gboolean from_signal)
 		}
 
 		hit = mono_de_ss_update (ss_req, ji, &sp, tls, ctx, method);
-		if (hit)
+		if (hit) {
 			g_ptr_array_add (ss_reqs, req);
+			rt_callbacks.end_single_step(tls, PROCESSED_SS_REQUEST);
+		}
 
 		SingleStepArgs args;
 		memset (&args, 0, sizeof (args));
@@ -1135,6 +1174,12 @@ mono_de_process_breakpoint (void *void_tls, gboolean from_signal)
 
 	mono_loader_unlock ();
 
+
+	for (i = 0; i < ss_reqs->len; ++i) {
+		EventRequest *req = (EventRequest *)g_ptr_array_index (ss_reqs, i);
+		req->event_kind = EVENT_KIND_STEP_INTERNAL;
+		mini_get_dbg_callbacks ()->clear_event_request (req->id, EVENT_KIND_STEP_INTERNAL, FALSE);
+	}
 	g_ptr_array_free (bp_reqs, TRUE);
 	g_ptr_array_free (ss_reqs, TRUE);
 
@@ -1276,7 +1321,7 @@ mono_de_ss_start (SingleStepReq *ss_req, SingleStepArgs *ss_args)
 	DbgEngineStackFrame **frames = ss_args->frames;
 	int nframes = ss_args->nframes;
 	SeqPoint *sp = &ss_args->sp;
-
+	printf("\n[%p]mono_de_ss_start - %x\n", (gpointer) (gsize) mono_native_thread_id_get (),sp->il_offset);
 	/*
 	 * Implement single stepping using breakpoints if possible.
 	 */
@@ -1483,13 +1528,7 @@ mono_de_ss_create (MonoInternalThread *thread, StepSize size, StepDepth depth, S
 	if (err)
 		return err;
 
-	// FIXME: Multiple requests
-	if (the_ss_req) {
-		DEBUG_PRINTF (0, "Received a single step request while the previous one was still active.\n");
-		return DE_ERR_NOT_IMPLEMENTED;
-	}
-
-	DEBUG_PRINTF (1, "[dbg] Starting single step of thread %p (depth=%s).\n", thread, ss_depth_to_string (depth));
+	printf("[dbg] Starting single step of thread %p (depth=%s).\n", thread, ss_depth_to_string (depth));
 
 	SingleStepReq *ss_req = g_new0 (SingleStepReq, 1);
 	ss_req->req = req;
@@ -1512,10 +1551,11 @@ mono_de_ss_create (MonoInternalThread *thread, StepSize size, StepDepth depth, S
 	if (err)
 		return err;
 
-	the_ss_req = ss_req;
+	g_hash_table_insert (the_ss_reqs, ss_req->thread, ss_req);
 
 	mono_de_ss_start (ss_req, &args);
-
+	void *tls = args.tls;
+	rt_callbacks.end_single_step(tls, PENDING_SS_REQUEST);
 	return DE_ERR_NONE;
 }
 
@@ -1545,6 +1585,7 @@ mono_de_init (DebuggerEngineCallbacks *cbs)
 	domains_init ();
 	breakpoints_init ();
 
+	ss_req_init ();
 	mono_debugger_log_init ();
 }
 
@@ -1553,6 +1594,7 @@ mono_de_cleanup (void)
 {
 	breakpoints_cleanup ();
 	domains_cleanup ();
+	ss_req_cleanup ();
 }
 
 void

@@ -584,6 +584,7 @@ public class Tests : TestsBase, ITest2
 		inspect_enumerator_in_generic_struct();
 		if_property_stepping();
 		fixed_size_array();
+		ss_multi_thread();
 		return 3;
 	}
 
@@ -825,6 +826,24 @@ public class Tests : TestsBase, ITest2
 		var n = new NodeTestFixedArray();
 		n.Buffer = new int4(1, 2, 3, 4);
 		n.Buffer2 = new char4('a', 'b', 'c', 'd');
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void ss_multi_thread () {
+		for (int i = 0; i < 3; i++)
+		{
+			var t = new Thread(mt_ss);
+			t.Name = "Thread_" + i;
+			t.Start();
+		}
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	static void mt_ss()
+	{
+		int a = 12;
+		int b = 13;
+		int c = 13;
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]

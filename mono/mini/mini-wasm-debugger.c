@@ -499,7 +499,7 @@ mono_wasm_current_bp_id (void)
 
 
 	GPtrArray *bp_reqs = g_ptr_array_new ();
-	mono_de_collect_breakpoints_by_sp (&sp, ji, NULL, bp_reqs);
+	mono_de_collect_breakpoints_by_sp (&sp, ji, NULL, bp_reqs, NULL);
 
 	if (bp_reqs->len == 0) {
 		DEBUG_PRINTF (1, "BP NOT FOUND for method %s JI %p il_offset %d\n", method->name, ji, sp.il_offset);

@@ -5045,6 +5045,39 @@ public class DebuggerTests
 	}
 
 	[Test]
+	public void InvokeSingleStepMultiThread () {
+		var e = run_until ("ss_multi_thread");
+		var req = create_step (e);
+		req.Disable ();
+		ReusableBreakpoint breakpoint = new ReusableBreakpoint (this, "mt_ss");
+		try {
+			breakpoint.Continue ();
+			e = breakpoint.lastEvent;
+			req = create_step (e);
+			for (int c = 1; c <= 100; c++) {
+				req.Disable ();
+				req = create_step (e);
+				req.Size = StepSize.Line;
+				try {
+					var bp = step_over_or_breakpoint ();
+					var thread = bp.Thread;
+					if (thread.GetFrames().Length > 0) {
+						var frame = thread.GetFrames()[0];
+						var l = bp.Thread.GetFrames ()[0].Location;
+						System.Console.WriteLine(bp.Thread.Name + " - LineNumber: " + l.LineNumber + " - " + bp.Thread.GetFrames ()[0].Method.Name);
+					}
+				}
+				catch (Exception z){
+					System.Console.WriteLine(z.Message);
+				}
+			}
+		} finally {
+			req.Disable ();
+			breakpoint.Disable ();
+		}
+	}
+
+	[Test]
 	public void InvokeMethodFixedArray () {
 		Event e = run_until ("fixed_size_array");
 		var req = create_step (e);

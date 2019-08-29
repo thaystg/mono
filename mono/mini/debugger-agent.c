@@ -105,6 +105,11 @@
 
 #define THREAD_TO_INTERNAL(thread) (thread)->internal_thread
 
+#define PENDING_SS_UNITIALIZED 0
+#define PROCESSED_SS_REQUEST 1
+#define PENDING_SS_REQUEST 2
+
+
 typedef struct {
 	gboolean enabled;
 	char *transport;
@@ -263,7 +268,7 @@ struct _DebuggerTlsData {
 	// The state that the debugger expects the thread to be in
 	MonoDebuggerThreadState thread_state;
 	MonoStopwatch step_time;
-
+	gboolean is_single_step;
 	gboolean gc_finalizing;
 };
 
@@ -727,6 +732,7 @@ static void* create_breakpoint_events (GPtrArray *ss_reqs, GPtrArray *bp_reqs, M
 static void process_breakpoint_events (void *_evts, MonoMethod *method, MonoContext *ctx, int il_offset);
 static int ss_create_init_args (SingleStepReq *ss_req, SingleStepArgs *args);
 static void ss_args_destroy (SingleStepArgs *ss_args);
+static void end_single_step (void * the_tls, gboolean stat);
 
 static GENERATE_TRY_GET_CLASS_WITH_CACHE (fixed_buffer, "System.Runtime.CompilerServices", "FixedBufferAttribute")
 
@@ -959,6 +965,7 @@ debugger_agent_init (void)
 	cbs.process_breakpoint_events = process_breakpoint_events;
 	cbs.ss_create_init_args = ss_create_init_args;
 	cbs.ss_args_destroy = ss_args_destroy;
+	cbs.end_single_step = end_single_step;
 
 	mono_de_init (&cbs);
 
@@ -4399,6 +4406,15 @@ ss_discard_frame_context (void *the_tls)
 	invalidate_frames (tls);
 }
 
+static void
+end_single_step (void *the_tls, gboolean stat)
+{
+	DebuggerTlsData *tls = (DebuggerTlsData*)the_tls;
+	tls->is_single_step = stat;
+	printf("[%p] EVENT_KIND_STEP - %d - %d\n\n", (gpointer) (gsize) mono_native_thread_id_get (), tls->thread->managed_id, stat);
+}
+
+
 static MonoContext*
 tls_get_restore_state (void *the_tls)
 {
@@ -6103,8 +6119,8 @@ set_interp_var (MonoType *t, gpointer addr, guint8 *val_buf)
 	memcpy (addr, val_buf, size);
 }
 
-static void
-clear_event_request (int req_id, int etype)
+void
+clear_event_request (int req_id, int etype, gboolean fromStep)
 {
 	int i;
 
@@ -6116,12 +6132,20 @@ clear_event_request (int req_id, int etype)
 			if (req->event_kind == EVENT_KIND_BREAKPOINT)
 				mono_de_clear_breakpoint ((MonoBreakpoint *)req->info);
 			if (req->event_kind == EVENT_KIND_STEP) {
-				mono_de_cancel_ss ();
+				if (fromStep) {
+					mono_loader_unlock ();
+					return;
+				}
+				else
+					mono_de_cancel_ss (req->info, TRUE);
 			}
 			if (req->event_kind == EVENT_KIND_METHOD_ENTRY)
 				mono_de_clear_breakpoint ((MonoBreakpoint *)req->info);
 			if (req->event_kind == EVENT_KIND_METHOD_EXIT)
 				mono_de_clear_breakpoint ((MonoBreakpoint *)req->info);
+			if (req->event_kind == EVENT_KIND_STEP_INTERNAL) {
+				mono_de_cancel_ss (req->info, TRUE);
+			}
 			g_ptr_array_remove_index_fast (event_requests, i);
 			g_free (req);
 			break;
@@ -6195,7 +6219,7 @@ clear_event_requests_for_assembly (MonoAssembly *assembly)
 			clear_assembly_from_modifiers (req, assembly);
 
 			if (req->event_kind == EVENT_KIND_BREAKPOINT && breakpoint_matches_assembly ((MonoBreakpoint *)req->info, assembly)) {
-				clear_event_request (req->id, req->event_kind);
+				clear_event_request (req->id, req->event_kind, FALSE);
 				found = TRUE;
 				break;
 			}
@@ -6854,7 +6878,7 @@ vm_commands (int command, int id, guint8 *p, guint8 *end, Buffer *buf)
 		while (event_requests->len > 0) {
 			EventRequest *req = (EventRequest *)g_ptr_array_index (event_requests, 0);
 
-			clear_event_request (req->id, req->event_kind);
+			clear_event_request (req->id, req->event_kind, FALSE);
 		}
 		mono_loader_unlock ();
 
@@ -6885,7 +6909,7 @@ vm_commands (int command, int id, guint8 *p, guint8 *end, Buffer *buf)
 		while (event_requests->len > 0) {
 			EventRequest *req = (EventRequest *)g_ptr_array_index (event_requests, 0);
 
-			clear_event_request (req->id, req->event_kind);
+			clear_event_request (req->id, req->event_kind, FALSE);
 		}
 		mono_loader_unlock ();
 
@@ -7314,7 +7338,6 @@ event_commands (int command, guint8 *p, guint8 *end, Buffer *buf)
 				buffer_add_int (buf, req->id);
 				return ERR_NONE;
 			}
-
 			err = (ErrorCode)mono_de_ss_create (THREAD_TO_INTERNAL (step_thread), size, depth, filter, req);
 			if (err != ERR_NONE) {
 				g_free (req);
@@ -7370,7 +7393,7 @@ event_commands (int command, guint8 *p, guint8 *end, Buffer *buf)
 
 		// FIXME: Make a faster mapping from req_id to request
 		mono_loader_lock ();
-		clear_event_request (req_id, etype);
+		clear_event_request (req_id, etype, TRUE);
 		mono_loader_unlock ();
 		break;
 	}
@@ -10072,6 +10095,7 @@ mono_debugger_agent_init (void)
 	cbs.debug_log = debugger_agent_debug_log;
 	cbs.debug_log_is_enabled = debugger_agent_debug_log_is_enabled;
 	cbs.send_crash = mono_debugger_agent_send_crash;
+	cbs.clear_event_request = clear_event_request;
 
 	mini_install_dbg_callbacks (&cbs);
 }

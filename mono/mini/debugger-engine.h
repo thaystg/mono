@@ -34,7 +34,8 @@ typedef enum {
 	EVENT_KIND_KEEPALIVE = 14,
 	EVENT_KIND_USER_BREAK = 15,
 	EVENT_KIND_USER_LOG = 16,
-	EVENT_KIND_CRASH = 17
+	EVENT_KIND_CRASH = 17,
+	EVENT_KIND_STEP_INTERNAL = 18
 } EventKind;
 
 typedef enum {
@@ -251,6 +252,7 @@ typedef struct {
 
 	int (*ss_create_init_args) (SingleStepReq *ss_req, SingleStepArgs *args);
 	void (*ss_args_destroy) (SingleStepArgs *ss_args);
+	void (*end_single_step) (void *tls, gboolean stat);
 } DebuggerEngineCallbacks;
 
 
@@ -270,7 +272,7 @@ void mono_de_domain_remove (MonoDomain *domain);
 //breakpoints
 void mono_de_clear_breakpoint (MonoBreakpoint *bp);
 MonoBreakpoint* mono_de_set_breakpoint (MonoMethod *method, long il_offset, EventRequest *req, MonoError *error);
-void mono_de_collect_breakpoints_by_sp (SeqPoint *sp, MonoJitInfo *ji, GPtrArray *ss_reqs, GPtrArray *bp_reqs);
+void mono_de_collect_breakpoints_by_sp (SeqPoint *sp, MonoJitInfo *ji, GPtrArray *ss_reqs, GPtrArray *bp_reqs, MonoInternalThread *thread);
 void mono_de_clear_breakpoints_for_domain (MonoDomain *domain);
 void mono_de_add_pending_breakpoints (MonoMethod *method, MonoJitInfo *ji);
 void mono_de_clear_all_breakpoints (void);
@@ -283,6 +285,8 @@ void mono_de_stop_single_stepping (void);
 void mono_de_process_breakpoint (void *tls, gboolean from_signal);
 void mono_de_process_single_step (void *tls, gboolean from_signal);
 DbgEngineErrorCode mono_de_ss_create (MonoInternalThread *thread, StepSize size, StepDepth depth, StepFilter filter, EventRequest *req);
-void mono_de_cancel_ss (void);
+void mono_de_cancel_ss (SingleStepReq *req, gboolean with_free);
+
+SingleStepReq* ss_req_acquire (MonoInternalThread *thread);
 
 #endif
