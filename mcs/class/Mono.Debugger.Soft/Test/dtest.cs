@@ -5046,7 +5046,12 @@ public class DebuggerTests
 
 	[Test]
 	public void InvokeSingleStepMultiThread () {
-		var e = run_until ("ss_multi_thread");
+		MethodMirror m = entry_point.DeclaringType.GetMethod ("mt_ss");
+		int firstLineFound = m.Locations [0].LineNumber + 1;
+		int line_first_counter = 5;
+		int line_second_counter = 5;
+		int line_third_counter = 5;
+		Event e = run_until ("ss_multi_thread");
 		var req = create_step (e);
 		req.Disable ();
 		ReusableBreakpoint breakpoint = new ReusableBreakpoint (this, "mt_ss");
@@ -5054,27 +5059,35 @@ public class DebuggerTests
 			breakpoint.Continue ();
 			e = breakpoint.lastEvent;
 			req = create_step (e);
-			for (int c = 1; c <= 100; c++) {
+			while (line_first_counter > 0 || line_second_counter > 0 || line_third_counter > 0) {
 				req.Disable ();
 				req = create_step (e);
 				req.Size = StepSize.Line;
 				try {
-					var bp = step_over_or_breakpoint ();
-					var thread = bp.Thread;
+					e = step_over_or_breakpoint ();
+					var thread = e.Thread;
 					if (thread.GetFrames().Length > 0) {
 						var frame = thread.GetFrames()[0];
-						var l = bp.Thread.GetFrames ()[0].Location;
-						System.Console.WriteLine(bp.Thread.Name + " - LineNumber: " + l.LineNumber + " - " + bp.Thread.GetFrames ()[0].Method.Name);
+						var l = e.Thread.GetFrames ()[0].Location;
+						if (l.LineNumber == firstLineFound)
+							line_first_counter--;
+						if (l.LineNumber == firstLineFound + 1)
+							line_second_counter--;
+						if (l.LineNumber == firstLineFound + 2)
+							line_third_counter--;							
 					}
 				}
 				catch (Exception z){
-					System.Console.WriteLine(z.Message);
+					break;
 				}
 			}
 		} finally {
 			req.Disable ();
 			breakpoint.Disable ();
 		}
+		Assert.AreEqual(0, line_first_counter);
+		Assert.AreEqual(0, line_second_counter);
+		Assert.AreEqual(0, line_third_counter);
 	}
 
 	[Test]

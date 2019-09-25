@@ -830,7 +830,7 @@ public class Tests : TestsBase, ITest2
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void ss_multi_thread () {
-		for (int i = 0; i < 3; i++)
+		for (int i = 0; i < 5; i++)
 		{
 			var t = new Thread(mt_ss);
 			t.Name = "Thread_" + i;

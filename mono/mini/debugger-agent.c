@@ -105,11 +105,6 @@
 
 #define THREAD_TO_INTERNAL(thread) (thread)->internal_thread
 
-#define PENDING_SS_UNITIALIZED 0
-#define PROCESSED_SS_REQUEST 1
-#define PENDING_SS_REQUEST 2
-
-
 typedef struct {
 	gboolean enabled;
 	char *transport;
@@ -732,7 +727,6 @@ static void* create_breakpoint_events (GPtrArray *ss_reqs, GPtrArray *bp_reqs, M
 static void process_breakpoint_events (void *_evts, MonoMethod *method, MonoContext *ctx, int il_offset);
 static int ss_create_init_args (SingleStepReq *ss_req, SingleStepArgs *args);
 static void ss_args_destroy (SingleStepArgs *ss_args);
-static void end_single_step (void * the_tls, gboolean stat);
 
 static GENERATE_TRY_GET_CLASS_WITH_CACHE (fixed_buffer, "System.Runtime.CompilerServices", "FixedBufferAttribute")
 
@@ -965,8 +959,6 @@ debugger_agent_init (void)
 	cbs.process_breakpoint_events = process_breakpoint_events;
 	cbs.ss_create_init_args = ss_create_init_args;
 	cbs.ss_args_destroy = ss_args_destroy;
-	cbs.end_single_step = end_single_step;
-
 	mono_de_init (&cbs);
 
 	transport_init ();
@@ -4405,15 +4397,6 @@ ss_discard_frame_context (void *the_tls)
 	tls->async_state.valid = FALSE;
 	invalidate_frames (tls);
 }
-
-static void
-end_single_step (void *the_tls, gboolean stat)
-{
-	DebuggerTlsData *tls = (DebuggerTlsData*)the_tls;
-	tls->is_single_step = stat;
-	printf("[%p] EVENT_KIND_STEP - %d - %d\n\n", (gpointer) (gsize) mono_native_thread_id_get (), tls->thread->managed_id, stat);
-}
-
 
 static MonoContext*
 tls_get_restore_state (void *the_tls)
