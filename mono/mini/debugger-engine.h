@@ -119,6 +119,7 @@ typedef struct {
 	/* Used to know if we are in process of async step-out and distishing from exception breakpoints */
 	MonoMethod* async_stepout_method;
 	int refcount;
+	gboolean processed;
 } SingleStepReq;
 
 
@@ -252,7 +253,6 @@ typedef struct {
 
 	int (*ss_create_init_args) (SingleStepReq *ss_req, SingleStepArgs *args);
 	void (*ss_args_destroy) (SingleStepArgs *ss_args);
-	void (*end_single_step) (void *tls, gboolean stat);
 } DebuggerEngineCallbacks;
 
 
@@ -285,7 +285,7 @@ void mono_de_stop_single_stepping (void);
 void mono_de_process_breakpoint (void *tls, gboolean from_signal);
 void mono_de_process_single_step (void *tls, gboolean from_signal);
 DbgEngineErrorCode mono_de_ss_create (MonoInternalThread *thread, StepSize size, StepDepth depth, StepFilter filter, EventRequest *req);
-void mono_de_cancel_ss (SingleStepReq *req, gboolean with_free);
+gboolean mono_de_cancel_ss (SingleStepReq *req, gboolean with_free);
 
 SingleStepReq* ss_req_acquire (MonoInternalThread *thread);
 

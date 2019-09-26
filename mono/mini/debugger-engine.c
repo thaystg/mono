@@ -741,36 +741,43 @@ ss_req_acquire (MonoInternalThread *thread)
 
 	dbg_lock ();
 	req = g_hash_table_lookup (the_ss_reqs, thread);
-	if (req)
+	if (req) {
 		req->refcount ++;
+		printf("INC ss_req_acquire - %x - %d\n", req, req->refcount);		
+	}
 	dbg_unlock ();
 	return req;
 }
 
-static void
+static gboolean
 mono_de_ss_req_release (SingleStepReq *req, gboolean with_free)
 {
 	gboolean free = FALSE;
 
 	dbg_lock ();
-	g_assert (req->refcount);
+	//g_assert (req->refcount); this can happen now because we don't remove the single_step_breakpoint when receive the clear request, we remove when we process, but we can close the vm without process the breakpoint, and this is the case.
 	req->refcount --;
-	if (req->refcount == 0)
+	printf("DEC mono_de_ss_req_release - %x - %d - %d\n", req, req->refcount, req->req->id);
+	if (req->refcount <= 0)
 		free = TRUE;
 	if (free && with_free) {
+		printf("apagando - %x - %d\n", req, req->refcount);
 		g_hash_table_remove(the_ss_reqs, req->thread);
 		ss_destroy (req);
+		dbg_unlock ();
+		return TRUE;
 	}
 	dbg_unlock ();
-	
+	return FALSE;
 }
 
-void
+gboolean
 mono_de_cancel_ss (SingleStepReq *req, gboolean with_free)
 {
 	if (the_ss_reqs) {
-		mono_de_ss_req_release (req, with_free);
+		return mono_de_ss_req_release (req, with_free);
 	}
+	return FALSE;
 }
 
 
@@ -799,9 +806,10 @@ mono_de_process_single_step (void *tls, gboolean from_signal)
 	 */
 	ss_req = ss_req_acquire (mono_thread_internal_current ());
 
-	if (!ss_req)
+	if (!ss_req) {
 		// FIXME: A suspend race
 		return;
+	}
 
 	if (mono_thread_internal_current () != ss_req->thread)
 		goto exit;
@@ -893,9 +901,15 @@ mono_de_process_single_step (void *tls, gboolean from_signal)
 	mono_loader_unlock ();
 
 	rt_callbacks.process_breakpoint_events (bp_events, method, ctx, il_offset);
-
+goto afterExit;
  exit:
+	printf("limpei a capiromba\n");
 	mono_de_ss_req_release (ss_req, TRUE);
+	printf("limpinha a capiromba\n");
+	return;
+ afterExit:
+	mini_get_dbg_callbacks ()->clear_event_request (ss_req->req->id, EVENT_KIND_STEP, FALSE);
+	//mono_de_ss_req_release (ss_req, TRUE);
 }
 
 /*
@@ -1129,8 +1143,9 @@ mono_de_process_breakpoint (void *void_tls, gboolean from_signal)
 		}
 
 		hit = mono_de_ss_update (ss_req, ji, &sp, tls, ctx, method);
-		if (hit) 
+		if (hit) {
 			g_ptr_array_add (ss_reqs, req);
+		}
 
 		SingleStepArgs args;
 		memset (&args, 0, sizeof (args));
@@ -1152,8 +1167,15 @@ mono_de_process_breakpoint (void *void_tls, gboolean from_signal)
 
 	for (i = 0; i < ss_reqs->len; ++i) {
 		EventRequest *req = (EventRequest *)g_ptr_array_index (ss_reqs, i);
-		req->event_kind = EVENT_KIND_STEP_INTERNAL;
-		mini_get_dbg_callbacks ()->clear_event_request (req->id, EVENT_KIND_STEP_INTERNAL, FALSE);
+		if (!((SingleStepReq*)req->info)->processed) {
+			printf("INC process_breakpoint - %x - %d - %d\n", ((SingleStepReq*)req->info), ((SingleStepReq*)req->info)->refcount, req->id);		
+			dbg_lock ();
+			((SingleStepReq*)req->info)->refcount++;
+			dbg_unlock ();
+		}
+		((SingleStepReq*)req->info)->processed = TRUE;
+		//((SingleStepReq*)req->info)->refcount--;
+		mini_get_dbg_callbacks ()->clear_event_request (req->id, EVENT_KIND_STEP, FALSE);
 	}
 	
 	g_ptr_array_free (bp_reqs, TRUE);
