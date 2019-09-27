@@ -118,8 +118,10 @@ typedef struct {
 	int async_id;
 	/* Used to know if we are in process of async step-out and distishing from exception breakpoints */
 	MonoMethod* async_stepout_method;
+	MonoInternalThread *async_thread;
 	int refcount;
 	gboolean processed;
+	gboolean jacontei;
 } SingleStepReq;
 
 

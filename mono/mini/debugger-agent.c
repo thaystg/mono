@@ -4821,7 +4821,7 @@ debugger_agent_single_step_from_context (MonoContext *ctx)
 	memcpy (&orig_restore_state, &tls->restore_state, sizeof (MonoThreadUnwindState));
 	mono_thread_state_init_from_monoctx (&tls->restore_state, ctx);
 	memcpy (&tls->handler_ctx, ctx, sizeof (MonoContext));
-
+	
 	mono_de_process_single_step (tls, FALSE);
 
 	memcpy (ctx, &tls->restore_state.ctx, sizeof (MonoContext));
@@ -6115,7 +6115,7 @@ clear_event_request (int req_id, int etype, gboolean fromStep)
 				mono_de_clear_breakpoint ((MonoBreakpoint *)req->info);
 			if (req->event_kind == EVENT_KIND_STEP) {
 				SingleStepReq *step_req = req->info;
-				printf("fromStep - %x - %d - %d\n", req->info, step_req->processed, req->id);	
+				printf("fromStep - %x - %d - %d - %x\n", req->info, step_req->processed, req->id, step_req->async_stepout_method);	
 				/*if (mono_de_cancel_ss (req->info, TRUE))
 				{
 					g_ptr_array_remove_index_fast (event_requests, i);
@@ -6917,7 +6917,7 @@ vm_commands (int command, int id, guint8 *p, guint8 *end, Buffer *buf)
 		mono_loader_lock ();
 		while (event_requests->len > 0) {
 			EventRequest *req = (EventRequest *)g_ptr_array_index (event_requests, 0);
-
+			printf("CMD_VM_EXIT - %x\n", req->info);
 			clear_event_request (req->id, req->event_kind, FALSE);
 		}
 		mono_loader_unlock ();

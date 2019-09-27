@@ -512,6 +512,7 @@ mono_de_collect_breakpoints_by_sp (SeqPoint *sp, MonoJitInfo *ji, GPtrArray *ss_
 {
 	for (int i = 0; i < breakpoints->len; ++i) {
 		MonoBreakpoint *bp = (MonoBreakpoint *)g_ptr_array_index (breakpoints, i);
+		/*&& !((SingleStepReq*)bp->req->info)->async_stepout_method && !((SingleStepReq*)bp->req->info)->async_id*/
 		if (bp->req->event_kind == EVENT_KIND_STEP && thread && ((SingleStepReq*)bp->req->info)->thread != thread)
 			continue;
 		if (!bp->method)
@@ -762,7 +763,9 @@ mono_de_ss_req_release (SingleStepReq *req, gboolean with_free)
 		free = TRUE;
 	if (free && with_free) {
 		printf("apagando - %x - %d\n", req, req->refcount);
-		g_hash_table_remove(the_ss_reqs, req->thread);
+		SingleStepReq *reqFound = g_hash_table_lookup (the_ss_reqs, req->thread);
+		if (req == reqFound)
+			g_hash_table_remove(the_ss_reqs, req->thread);
 		ss_destroy (req);
 		dbg_unlock ();
 		return TRUE;
@@ -794,12 +797,13 @@ mono_de_process_single_step (void *tls, gboolean from_signal)
 	SeqPoint sp;
 	MonoSeqPointInfo *info;
 	SingleStepReq *ss_req;
-
+	printf("mono_de_process_single_step\n");
 	/* Skip the instruction causing the single step */
 	rt_callbacks.begin_single_step_processing (ctx, from_signal);
 
-	if (rt_callbacks.try_process_suspend (tls, ctx))
+	if (rt_callbacks.try_process_suspend (tls, ctx)) {
 		return;
+	}
 
 	/*
 	 * This can run concurrently with a clear_event_request () call, so needs locking/reference counts.
@@ -807,6 +811,7 @@ mono_de_process_single_step (void *tls, gboolean from_signal)
 	ss_req = ss_req_acquire (mono_thread_internal_current ());
 
 	if (!ss_req) {
+		printf("nao tem req?? - %x\n", mono_thread_internal_current ());
 		// FIXME: A suspend race
 		return;
 	}
@@ -814,6 +819,7 @@ mono_de_process_single_step (void *tls, gboolean from_signal)
 	if (mono_thread_internal_current () != ss_req->thread)
 		goto exit;
 
+	printf("mono_de_process_single_step - %x\n", ss_req);
 	ip = (guint8 *)MONO_CONTEXT_GET_IP (ctx);
 
 	ji = get_top_method_ji (ip, &domain, (gpointer*)&ip);
@@ -879,11 +885,13 @@ mono_de_process_single_step (void *tls, gboolean from_signal)
 	args.frames = NULL;
 	args.nframes = 0;
 	mono_de_ss_start (ss_req, &args);
-
+	printf("method->name - %s\n", method->name);
 	if ((ss_req->filter & STEP_FILTER_STATIC_CTOR) &&
 		(method->flags & METHOD_ATTRIBUTE_SPECIAL_NAME) &&
-		!strcmp (method->name, ".cctor"))
+		!strcmp (method->name, ".cctor")) {
+		printf("entrei no exit\n\n");
 		goto exit;
+	}
 
 	// FIXME: Has to lock earlier
 
@@ -903,11 +911,12 @@ mono_de_process_single_step (void *tls, gboolean from_signal)
 	rt_callbacks.process_breakpoint_events (bp_events, method, ctx, il_offset);
 goto afterExit;
  exit:
-	printf("limpei a capiromba\n");
+	printf("limpei a capiromba - %x - %d\n", ss_req);
 	mono_de_ss_req_release (ss_req, TRUE);
 	printf("limpinha a capiromba\n");
 	return;
  afterExit:
+	printf("vim do single_step\n");
 	mini_get_dbg_callbacks ()->clear_event_request (ss_req->req->id, EVENT_KIND_STEP, FALSE);
 	//mono_de_ss_req_release (ss_req, TRUE);
 }
@@ -1052,7 +1061,7 @@ mono_de_process_breakpoint (void *void_tls, gboolean from_signal)
 	MonoSeqPointInfo *info;
 	SeqPoint sp;
 	gboolean found_sp;
-
+	printf("mono_de_process_breakpoint\n");
 	ip = (guint8 *)MONO_CONTEXT_GET_IP (ctx);
 
 	ji = get_top_method_ji (ip, NULL, (gpointer*)&ip);
@@ -1107,6 +1116,7 @@ mono_de_process_breakpoint (void *void_tls, gboolean from_signal)
 
 		//if we hit async_stepout_method, it's our no matter which thread
 		if ((ss_req->async_stepout_method != method) && (ss_req->async_id || mono_thread_internal_current () != ss_req->thread)) {
+			printf("entrei aqui no ss_req->async_stepout_method %x - %d\n", ss_req, ss_req->req->id);
 			DbgEngineStackFrame **frames;
 			int nframes;
 			//We have different thread and we don't have async stepping in progress
@@ -1167,14 +1177,13 @@ mono_de_process_breakpoint (void *void_tls, gboolean from_signal)
 
 	for (i = 0; i < ss_reqs->len; ++i) {
 		EventRequest *req = (EventRequest *)g_ptr_array_index (ss_reqs, i);
-		if (!((SingleStepReq*)req->info)->processed) {
-			printf("INC process_breakpoint - %x - %d - %d\n", ((SingleStepReq*)req->info), ((SingleStepReq*)req->info)->refcount, req->id);		
-			dbg_lock ();
-			((SingleStepReq*)req->info)->refcount++;
-			dbg_unlock ();
-		}
+		printf("INC process_breakpoint - %x - %d - %d\n", ((SingleStepReq*)req->info), ((SingleStepReq*)req->info)->refcount, req->id);		
+		dbg_lock ();
+		((SingleStepReq*)req->info)->refcount++;
+		dbg_unlock ();
 		((SingleStepReq*)req->info)->processed = TRUE;
 		//((SingleStepReq*)req->info)->refcount--;
+		printf("vim do process_breakpoint\n");
 		mini_get_dbg_callbacks ()->clear_event_request (req->id, EVENT_KIND_STEP, FALSE);
 	}
 	
@@ -1383,6 +1392,7 @@ mono_de_ss_start (SingleStepReq *ss_req, SingleStepArgs *ss_args)
 				if (rt_callbacks.set_set_notification_for_wait_completion_flag (frames [0])) {
 					ss_req->async_id = rt_callbacks.get_this_async_id (frames [0]);
 					ss_req->async_stepout_method = rt_callbacks.get_notify_debugger_of_wait_completion_method ();
+					ss_req->async_thread =  mono_thread_internal_current ();
 					ss_bp_add_one (ss_req, &ss_req_bp_count, &ss_req_bp_cache, ss_req->async_stepout_method, 0);
 					g_hash_table_destroy (ss_req_bp_cache);
 					mono_debug_free_method_async_debug_info (asyncMethod);
@@ -1528,6 +1538,7 @@ mono_de_ss_create (MonoInternalThread *thread, StepSize size, StepDepth depth, S
 	DEBUG_PRINTF (1, "[dbg] Starting single step of thread %p (depth=%s).\n", thread, ss_depth_to_string (depth));
 
 	SingleStepReq *ss_req = g_new0 (SingleStepReq, 1);
+	printf("Adding req - %d - %x\n", req->id, filter);
 	ss_req->req = req;
 	ss_req->thread = thread;
 	ss_req->size = size;
@@ -1547,8 +1558,17 @@ mono_de_ss_create (MonoInternalThread *thread, StepSize size, StepDepth depth, S
 	err = rt_callbacks.ss_create_init_args (ss_req, &args);
 	if (err)
 		return err;
+	
+	SingleStepReq *reqFound = g_hash_table_lookup (the_ss_reqs, ss_req->thread);
 
-	g_hash_table_insert (the_ss_reqs, ss_req->thread, ss_req);
+	if (reqFound) {
+		printf("forcando apagar pq chegou outra req pra mesma thread - %x\n", reqFound);
+		if (reqFound->refcount == 0)
+			mini_get_dbg_callbacks ()->clear_event_request (reqFound->req->id, EVENT_KIND_STEP, FALSE);
+	}
+
+	g_hash_table_replace (the_ss_reqs, ss_req->thread, ss_req);
+	printf("Adding req - %d, %x, %x\n",  req->id, ss_req->thread, ss_req);
 
 	mono_de_ss_start (ss_req, &args);
 	return DE_ERR_NONE;
