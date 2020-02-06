@@ -71,8 +71,8 @@ public class DebuggerTests
 #if !MONODROID_TOOLS
 	Diag.ProcessStartInfo CreateStartInfo (string app, string method = null, string runtimeParameters = null) {
 		var pi = new Diag.ProcessStartInfo ();
-		pi.RedirectStandardOutput = true;
-		pi.RedirectStandardError = true;
+		//pi.RedirectStandardOutput = true;
+		//pi.RedirectStandardError = true;
 		if (runtime != null) {
 			pi.FileName = runtime;
 		} else {
@@ -5197,6 +5197,51 @@ public class DebuggerTests
 		catch (ArgumentException ex) {
 			Assert.IsInstanceOfType (typeof (ArgumentException), ex);
 		}
+	}
+
+
+	[Test]
+	public void InvokeAbortDomainCheck () {
+		vm.Detach ();
+
+		Start (dtest_app_path, "invoke-abort");
+
+		Event e = run_until ("invoke_abort");
+		StackFrame f = e.Thread.GetFrames ()[0];
+		System.Console.WriteLine(e.Thread.GetFrames ()[0].Id);
+		System.Console.WriteLine(e.Thread.GetFrames ()[0].Location.LineNumber);
+		System.Console.WriteLine(e.Thread.GetFrames ()[1].Id);
+		System.Console.WriteLine(e.Thread.GetFrames ()[1].Location.LineNumber);
+		var req = create_step (e);
+		req.Enable ();
+
+		// Step over 'bool b = true'
+		e = step_once ();
+		f = e.Thread.GetFrames ()[0];
+		System.Console.WriteLine(e.Thread.GetFrames ()[0].Id);
+		System.Console.WriteLine(e.Thread.GetFrames ()[0].Location.LineNumber);
+		System.Console.WriteLine(e.Thread.GetFrames ()[1].Id);
+		System.Console.WriteLine(e.Thread.GetFrames ()[1].Location.LineNumber);
+
+		/*e = step_once ();
+		f = e.Thread.GetFrames ()[0];
+		System.Console.WriteLine(e.Thread.GetFrames ()[0].Id);
+		System.Console.WriteLine(e.Thread.GetFrames ()[1].Id);*/
+
+
+		var obj = f.GetThis () as ObjectMirror;
+		var t = obj.Type;
+		var m = t.GetMethod ("invoke_abort_2");
+		var res = (IInvokeAsyncResult)obj.BeginInvokeMethod (e.Thread, m, null, InvokeOptions.None, delegate { }, null);
+		Thread.Sleep (500);
+		res.Abort ();
+		System.Console.WriteLine("cheguei");
+		System.Console.WriteLine(e.Thread.GetFrames ()[0].Id);
+		System.Console.WriteLine(e.Thread.GetFrames ()[0].Location.LineNumber);
+		System.Console.WriteLine(e.Thread.GetFrames ()[1].Id);
+		System.Console.WriteLine(e.Thread.GetFrames ()[1].Location.LineNumber);
+		var Domain = f.Domain;
+		System.Console.WriteLine("terminei");
 	}
 
 

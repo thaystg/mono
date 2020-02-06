@@ -4274,7 +4274,7 @@ mini_init (const char *filename, const char *runtime_version)
 
 	mini_get_dbg_callbacks ()->init ();
 
-#ifdef TARGET_WASM
+#if defined(TARGET_WASM) && !defined(DISABLE_DEBUGGER)
 	mono_wasm_debugger_init ();
 #endif
 

@@ -12,8 +12,7 @@
 //XXX This is dirty, extend ee.h to support extracting info from MonoInterpFrameHandle
 #include <mono/mini/interp/interp-internals.h>
 
-#ifdef HOST_WASM
-
+#if defined(HOST_WASM) && !defined(DISABLE_DEBUGGER)
 #include <emscripten.h>
 
 #include "mono/metadata/assembly-internals.h"
@@ -57,7 +56,6 @@ static GHashTable *obj_to_objref;
 static int objref_id = 0;
 
 #define THREAD_TO_INTERNAL(thread) (thread)->internal_thread
-
 static void
 inplace_tolower (char *c)
 {
@@ -934,6 +932,11 @@ mono_wasm_breakpoint_hit (void)
 
 void
 mono_wasm_debugger_init (void)
+{
+}
+
+MONO_API void
+mono_wasm_enable_debugging (void)
 {
 }
 

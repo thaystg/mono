@@ -7606,7 +7606,7 @@ emit_trampolines (MonoAotCompile *acfg)
 		emit_trampoline (acfg, info);
 		mono_tramp_info_free (info);
 
-#ifdef MONO_ARCH_HAVE_SDB_TRAMPOLINES
+#if  defined(MONO_ARCH_HAVE_SDB_TRAMPOLINES) && !defined(DISABLE_DEBUGGER)
 		mono_arch_create_sdb_trampoline (TRUE, &info, TRUE);
 		emit_trampoline (acfg, info);
 		mono_tramp_info_free (info);

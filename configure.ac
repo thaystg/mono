@@ -1880,6 +1880,11 @@ if test "x$mono_feature_disable_soft_debug" = "xyes"; then
 	AC_MSG_NOTICE([Disabled Soft Debugger.])
 fi
 
+if test "x$mono_feature_disable_debugger" = "xyes"; then
+	AC_DEFINE(DISABLE_DEBUGGER, 1, [Disable Soft Debugger Agent.])
+	AC_MSG_NOTICE([Disabled Debugger.])
+fi
+
 AM_CONDITIONAL(DISABLE_DEBUGGER_AGENT, test x$mono_feature_disable_debugger_agent = xyes)
 
 if test "x$mono_feature_disable_perfcounters" = "xyes"; then

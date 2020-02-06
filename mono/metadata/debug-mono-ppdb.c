@@ -35,6 +35,8 @@
 #include <zlib.h>
 #endif
 
+#ifndef DISABLE_DEBUGGER
+
 #include "debug-mono-ppdb.h"
 
 struct _MonoPPDBFile {
@@ -836,3 +838,5 @@ mono_ppdb_get_sourcelink (MonoDebugHandle *handle)
 	res [blob_len] = '\0';
 	return res;
 }
+
+#endif

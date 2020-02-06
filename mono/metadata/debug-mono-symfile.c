@@ -34,7 +34,9 @@
 #include <mono/utils/mono-mmap.h>
 #include <mono/utils/bsearch.h>
 
-#ifndef DISABLE_MDB
+#if defined(DISABLE_MDB) && !defined(DISABLE_DEBUGGER)
+
+
 
 #include <fcntl.h>
 #ifdef HAVE_UNISTD_H
@@ -58,6 +60,7 @@ struct _MonoSymbolFile {
 	MonoSymbolFileOffsetTable *offset_table;
 	gboolean was_loaded_from_memory;
 };
+
 
 static void
 free_method_info (MonoDebugMethodInfo *minfo)
@@ -892,4 +895,4 @@ mono_debug_symfile_free_location (MonoDebugSourceLocation  *location)
 {
 }
 
-#endif
+#endif 

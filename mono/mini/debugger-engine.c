@@ -72,7 +72,9 @@ static GHashTable *domains;
 static void
 domains_init (void)
 {
+#ifndef DISABLE_DEBUGGER	
 	domains = g_hash_table_new (mono_aligned_addr_hash, NULL);
+#endif	
 }
 
 static void
@@ -91,7 +93,9 @@ domains_cleanup (void)
 void
 mono_de_foreach_domain (GHFunc func, gpointer user_data)
 {
+#ifndef DISABLE_DEBUGGER		
 	g_hash_table_foreach (domains, func, user_data);
+#endif	
 }
 
 /*
@@ -100,9 +104,11 @@ mono_de_foreach_domain (GHFunc func, gpointer user_data)
 void
 mono_de_domain_remove (MonoDomain *domain)
 {
+#ifndef DISABLE_DEBUGGER		
 	mono_loader_lock ();
 	g_hash_table_remove (domains, domain);
 	mono_loader_unlock ();
+#endif	
 }
 
 /*
@@ -111,9 +117,11 @@ mono_de_domain_remove (MonoDomain *domain)
 void
 mono_de_domain_add (MonoDomain *domain)
 {
+#ifndef DISABLE_DEBUGGER		
 	mono_loader_lock ();
 	g_hash_table_insert (domains, domain, domain);
 	mono_loader_unlock ();
+#endif	
 }
 
 /*
@@ -129,8 +137,10 @@ static GHashTable *bp_locs;
 static void
 breakpoints_init (void)
 {
+#ifndef DISABLE_DEBUGGER		
 	breakpoints = g_ptr_array_new ();
 	bp_locs = g_hash_table_new (NULL, NULL);
+#endif	
 }
 
 /*
@@ -142,6 +152,7 @@ breakpoints_init (void)
 static void
 insert_breakpoint (MonoSeqPointInfo *seq_points, MonoDomain *domain, MonoJitInfo *ji, MonoBreakpoint *bp, MonoError *error)
 {
+#ifndef DISABLE_DEBUGGER		
 	int count;
 	BreakpointInstance *inst;
 	SeqPointIterator it;
@@ -226,11 +237,13 @@ insert_breakpoint (MonoSeqPointInfo *seq_points, MonoDomain *domain, MonoJitInfo
 	}
 
 	DEBUG_PRINTF (1, "[dbg] Inserted breakpoint at %s:[il=0x%x,native=0x%x] [%p](%d).\n", mono_method_full_name (jinfo_get_method (ji), TRUE), (int)it.seq_point.il_offset, (int)it.seq_point.native_offset, inst->ip, count);
+#endif	
 }
 
 static void
 remove_breakpoint (BreakpointInstance *inst)
 {
+#ifndef DISABLE_DEBUGGER		
 	int count;
 	MonoJitInfo *ji = inst->ji;
 	guint8 *ip = inst->ip;
@@ -254,6 +267,7 @@ remove_breakpoint (BreakpointInstance *inst)
 		}
 		DEBUG_PRINTF (1, "[dbg] Clear breakpoint at %s [%p].\n", mono_method_full_name (jinfo_get_method (ji), TRUE), ip);
 	}
+#endif	
 }
 
 /*
@@ -262,6 +276,7 @@ remove_breakpoint (BreakpointInstance *inst)
 static gboolean
 bp_matches_method (MonoBreakpoint *bp, MonoMethod *method)
 {
+#ifndef DISABLE_DEBUGGER		
 	int i;
 
 	if (!bp->method)
@@ -287,7 +302,7 @@ bp_matches_method (MonoBreakpoint *bp, MonoMethod *method)
 			return TRUE;
 		}
 	}
-
+#endif
 	return FALSE;
 }
 
@@ -299,6 +314,7 @@ bp_matches_method (MonoBreakpoint *bp, MonoMethod *method)
 void
 mono_de_add_pending_breakpoints (MonoMethod *method, MonoJitInfo *ji)
 {
+#ifndef DISABLE_DEBUGGER		
 	int i, j;
 	MonoSeqPointInfo *seq_points;
 	MonoDomain *domain;
@@ -346,11 +362,13 @@ mono_de_add_pending_breakpoints (MonoMethod *method, MonoJitInfo *ji)
 	}
 
 	mono_loader_unlock ();
+#endif	
 }
 
 static void
 set_bp_in_method (MonoDomain *domain, MonoMethod *method, MonoSeqPointInfo *seq_points, MonoBreakpoint *bp, MonoError *error)
 {
+#ifndef DISABLE_DEBUGGER		
 	MonoJitInfo *ji;
 
 	if (error)
@@ -360,6 +378,7 @@ set_bp_in_method (MonoDomain *domain, MonoMethod *method, MonoSeqPointInfo *seq_
 	g_assert (ji);
 
 	insert_breakpoint (seq_points, domain, ji, bp, error);
+#endif	
 }
 
 typedef struct {
@@ -372,6 +391,7 @@ typedef struct {
 static void
 collect_domain_bp (gpointer key, gpointer value, gpointer user_data)
 {
+#ifndef DISABLE_DEBUGGER		
 	GHashTableIter iter;
 	MonoSeqPointInfo *seq_points;
 	MonoDomain *domain = (MonoDomain*)key;
@@ -389,6 +409,7 @@ collect_domain_bp (gpointer key, gpointer value, gpointer user_data)
 		}
 	}
 	mono_domain_unlock (domain);
+#endif	
 }
 
 void
@@ -411,6 +432,7 @@ mono_de_clear_all_breakpoints (void)
 MonoBreakpoint*
 mono_de_set_breakpoint (MonoMethod *method, long il_offset, EventRequest *req, MonoError *error)
 {
+#ifndef DISABLE_DEBUGGER	
 	MonoBreakpoint *bp;
 	MonoDomain *domain;
 	MonoMethod *m;
@@ -472,22 +494,28 @@ mono_de_set_breakpoint (MonoMethod *method, long il_offset, EventRequest *req, M
 	}
 
 	return bp;
+#else
+	return NULL;	
+#endif	
 }
 
 MonoBreakpoint *
 mono_de_get_breakpoint_by_id (int id)
 {
+#ifndef DISABLE_DEBUGGER		
 	for (int i = 0; i < breakpoints->len; ++i) {
 		MonoBreakpoint *bp = (MonoBreakpoint *)g_ptr_array_index (breakpoints, i);
 		if (bp->req->id == id)
 			return bp;
 	}
+#endif	
 	return NULL;
 }
 
 void
 mono_de_clear_breakpoint (MonoBreakpoint *bp)
 {
+#ifndef DISABLE_DEBUGGER		
 	int i;
 
 	// FIXME: locking, races
@@ -506,11 +534,13 @@ mono_de_clear_breakpoint (MonoBreakpoint *bp)
 
 	g_ptr_array_free (bp->children, TRUE);
 	g_free (bp);
+#endif	
 }
 
 void
 mono_de_collect_breakpoints_by_sp (SeqPoint *sp, MonoJitInfo *ji, GPtrArray *ss_reqs, GPtrArray *bp_reqs)
 {
+#ifndef DISABLE_DEBUGGER		
 	for (int i = 0; i < breakpoints->len; ++i) {
 		MonoBreakpoint *bp = (MonoBreakpoint *)g_ptr_array_index (breakpoints, i);
 
@@ -530,11 +560,13 @@ mono_de_collect_breakpoints_by_sp (SeqPoint *sp, MonoJitInfo *ji, GPtrArray *ss_
 			}
 		}
 		}
+#endif		
 }
 
 static void
 breakpoints_cleanup (void)
 {
+#ifndef DISABLE_DEBUGGER		
 	int i;
 
 	mono_loader_lock ();
@@ -549,6 +581,7 @@ breakpoints_cleanup (void)
 	bp_locs = NULL;
 
 	mono_loader_unlock ();
+#endif
 }
 
 /*
@@ -559,6 +592,7 @@ breakpoints_cleanup (void)
 void
 mono_de_clear_breakpoints_for_domain (MonoDomain *domain)
 {
+#ifndef DISABLE_DEBUGGER		
 	int i, j;
 
 	/* This could be called after shutdown */
@@ -585,6 +619,7 @@ mono_de_clear_breakpoints_for_domain (MonoDomain *domain)
 		}
 	}
 	mono_loader_unlock ();
+#endif	
 }
 
 /* Single stepping engine */
@@ -603,6 +638,7 @@ static SingleStepReq *the_ss_req;
 void
 mono_de_start_single_stepping (void)
 {
+#ifndef DISABLE_DEBUGGER		
 	int val = mono_atomic_inc_i32 (&ss_count);
 
 	if (val == 1) {
@@ -611,11 +647,13 @@ mono_de_start_single_stepping (void)
 #endif
 		mini_get_interp_callbacks ()->start_single_stepping ();
 	}
+#endif	
 }
 
 void
 mono_de_stop_single_stepping (void)
 {
+#ifndef DISABLE_DEBUGGER		
 	int val = mono_atomic_dec_i32 (&ss_count);
 
 	if (val == 0) {
@@ -624,11 +662,13 @@ mono_de_stop_single_stepping (void)
 #endif
 		mini_get_interp_callbacks ()->stop_single_stepping ();
 	}
+#endif	
 }
 
 static MonoJitInfo*
 get_top_method_ji (gpointer ip, MonoDomain **domain, gpointer *out_ip)
 {
+#ifndef DISABLE_DEBUGGER		
 	MonoJitInfo *ji;
 
 	if (out_ip)
@@ -653,6 +693,9 @@ get_top_method_ji (gpointer ip, MonoDomain **domain, gpointer *out_ip)
 			*out_ip = mini_get_interp_callbacks ()->frame_get_ip (frame);
 	}
 	return ji;
+#else
+	return NULL;	
+#endif	
 }
 
 static void
@@ -667,6 +710,7 @@ no_seq_points_found (MonoMethod *method, int offset)
 static const char*
 ss_depth_to_string (StepDepth depth)
 {
+#ifndef DISABLE_DEBUGGER		
 	switch (depth) {
 	case STEP_DEPTH_OVER:
 		return "over";
@@ -678,6 +722,9 @@ ss_depth_to_string (StepDepth depth)
 		g_assert_not_reached ();
 		return NULL;
 	}
+#else
+	return NULL;
+#endif	
 }
 
 /*
@@ -688,6 +735,7 @@ ss_depth_to_string (StepDepth depth)
 static void
 ss_stop (SingleStepReq *ss_req)
 {
+#ifndef DISABLE_DEBUGGER		
 	if (ss_req->bps) {
 		GSList *l;
 
@@ -704,21 +752,25 @@ ss_stop (SingleStepReq *ss_req)
 		mono_de_stop_single_stepping ();
 		ss_req->global = FALSE;
 	}
+#endif	
 }
 
 static void
 ss_destroy (SingleStepReq *req)
 {
+#ifndef DISABLE_DEBUGGER		
 	DEBUG_PRINTF (1, "[dbg] ss_destroy.\n");
 
 	ss_stop (req);
 
 	g_free (req);
+#endif	
 }
 
 static SingleStepReq*
 ss_req_acquire (void)
 {
+#ifndef DISABLE_DEBUGGER		
 	SingleStepReq *req;
 
 	dbg_lock ();
@@ -727,11 +779,15 @@ ss_req_acquire (void)
 		req->refcount ++;
 	dbg_unlock ();
 	return req;
+#else
+	return NULL;	
+#endif	
 }
 
 static void
 mono_de_ss_req_release (SingleStepReq *req)
 {
+#ifndef DISABLE_DEBUGGER		
 	gboolean free = FALSE;
 
 	dbg_lock ();
@@ -745,21 +801,25 @@ mono_de_ss_req_release (SingleStepReq *req)
 			the_ss_req = NULL;
 		ss_destroy (req);
 	}
+#endif	
 }
 
 void
 mono_de_cancel_ss (void)
 {
+#ifndef DISABLE_DEBUGGER	
 	if (the_ss_req) {
 		mono_de_ss_req_release (the_ss_req);
 		the_ss_req = NULL;
 	}
+#endif	
 }
 
 
 void
 mono_de_process_single_step (void *tls, gboolean from_signal)
 {
+#ifndef DISABLE_DEBUGGER	
 	MonoJitInfo *ji;
 	guint8 *ip;
 	GPtrArray *reqs;
@@ -879,6 +939,7 @@ mono_de_process_single_step (void *tls, gboolean from_signal)
 
  exit:
 	mono_de_ss_req_release (ss_req);
+#endif	
 }
 
 /*
@@ -889,6 +950,7 @@ mono_de_process_single_step (void *tls, gboolean from_signal)
 static gboolean
 mono_de_ss_update (SingleStepReq *req, MonoJitInfo *ji, SeqPoint *sp, void *tls, MonoContext *ctx, MonoMethod* method)
 {
+#ifndef DISABLE_DEBUGGER	
 	MonoDebugMethodInfo *minfo;
 	MonoDebugSourceLocation *loc = NULL;
 	gboolean hit = TRUE;
@@ -1004,11 +1066,16 @@ mono_de_ss_update (SingleStepReq *req, MonoJitInfo *ji, SeqPoint *sp, void *tls,
 	}
 
 	return hit;
+#else
+	return FALSE;	
+#endif
+
 }
 
 void
 mono_de_process_breakpoint (void *void_tls, gboolean from_signal)
 {
+#ifndef DISABLE_DEBUGGER	
 	DebuggerTlsData *tls = (DebuggerTlsData*)void_tls;
 	MonoJitInfo *ji;
 	guint8 *ip;
@@ -1139,6 +1206,7 @@ mono_de_process_breakpoint (void *void_tls, gboolean from_signal)
 	g_ptr_array_free (ss_reqs, TRUE);
 
 	rt_callbacks.process_breakpoint_events (bp_events, method, ctx, 0);
+#endif	
 }
 
 /*
@@ -1149,6 +1217,7 @@ mono_de_process_breakpoint (void *void_tls, gboolean from_signal)
 static gboolean
 ss_bp_is_unique (GSList *bps, GHashTable *ss_req_bp_cache, MonoMethod *method, guint32 il_offset)
 {
+#ifndef DISABLE_DEBUGGER	
 	if (ss_req_bp_cache) {
 		MonoBreakpoint dummy = {method, (long)il_offset, NULL, NULL};
 		return !g_hash_table_lookup (ss_req_bp_cache, &dummy);
@@ -1158,6 +1227,7 @@ ss_bp_is_unique (GSList *bps, GHashTable *ss_req_bp_cache, MonoMethod *method, g
 		if (bp->method == method && bp->il_offset == il_offset)
 			return FALSE;
 	}
+#endif	
 	return TRUE;
 }
 
@@ -1169,9 +1239,13 @@ ss_bp_is_unique (GSList *bps, GHashTable *ss_req_bp_cache, MonoMethod *method, g
 static gint
 ss_bp_eq (gconstpointer ka, gconstpointer kb)
 {
+#ifndef DISABLE_DEBUGGER	
 	const MonoBreakpoint *s1 = (const MonoBreakpoint *)ka;
 	const MonoBreakpoint *s2 = (const MonoBreakpoint *)kb;
 	return (s1->method == s2->method && s1->il_offset == s2->il_offset) ? 1 : 0;
+#else
+	return 0;
+#endif	
 }
 
 /*
@@ -1182,11 +1256,15 @@ ss_bp_eq (gconstpointer ka, gconstpointer kb)
 static guint
 ss_bp_hash (gconstpointer data)
 {
+#ifndef DISABLE_DEBUGGER	
 	const MonoBreakpoint *s = (const MonoBreakpoint *)data;
 	guint hash = (guint) (uintptr_t) s->method;
 	hash ^= ((guint)s->il_offset) << 16; // Assume low bits are more interesting
 	hash ^= ((guint)s->il_offset) >> 16;
 	return hash;
+#else
+	return 0;
+#endif	
 }
 
 #define MAX_LINEAR_SCAN_BPS 7
@@ -1201,6 +1279,7 @@ static void
 ss_bp_add_one (SingleStepReq *ss_req, int *ss_req_bp_count, GHashTable **ss_req_bp_cache,
 	          MonoMethod *method, guint32 il_offset)
 {
+#ifndef DISABLE_DEBUGGER	
 	// This list is getting too long, switch to using the hash table
 	if (!*ss_req_bp_cache && *ss_req_bp_count > MAX_LINEAR_SCAN_BPS) {
 		*ss_req_bp_cache = g_hash_table_new (ss_bp_hash, ss_bp_eq);
@@ -1218,11 +1297,13 @@ ss_bp_add_one (SingleStepReq *ss_req, int *ss_req_bp_count, GHashTable **ss_req_
 	} else {
 		DEBUG_PRINTF (1, "[dbg] Candidate breakpoint at %s:[il=0x%x] is a duplicate for this step request, will not add.\n", mono_method_full_name (method, TRUE), (int)il_offset);
 	}
+#endif	
 }
 
 static gboolean
 is_last_non_empty (SeqPoint* sp, MonoSeqPointInfo *info)
 {
+#ifndef DISABLE_DEBUGGER	
 	if (!sp->next_len)
 		return TRUE;
 	SeqPoint* next = g_new (SeqPoint, sp->next_len);
@@ -1239,6 +1320,7 @@ is_last_non_empty (SeqPoint* sp, MonoSeqPointInfo *info)
 		}
 	}
 	g_free (next);
+#endif	
 	return TRUE;
 }
 
@@ -1253,6 +1335,7 @@ is_last_non_empty (SeqPoint* sp, MonoSeqPointInfo *info)
 static void
 mono_de_ss_start (SingleStepReq *ss_req, SingleStepArgs *ss_args)
 {
+#ifndef DISABLE_DEBUGGER	
 	int i, j, frame_index;
 	SeqPoint *next_sp, *parent_sp = NULL;
 	SeqPoint local_sp, local_parent_sp;
@@ -1474,6 +1557,7 @@ mono_de_ss_start (SingleStepReq *ss_req, SingleStepArgs *ss_args)
 
 cleanup:
 	rt_callbacks.ss_args_destroy (ss_args);
+#endif	
 }
 
 
@@ -1483,6 +1567,7 @@ cleanup:
 DbgEngineErrorCode
 mono_de_ss_create (MonoInternalThread *thread, StepSize size, StepDepth depth, StepFilter filter, EventRequest *req)
 {
+#ifndef DISABLE_DEBUGGER	
 	int err = rt_callbacks.ensure_runtime_is_suspended ();
 	if (err)
 		return err;
@@ -1523,7 +1608,7 @@ mono_de_ss_create (MonoInternalThread *thread, StepSize size, StepDepth depth, S
 	the_ss_req = ss_req;
 
 	mono_de_ss_start (ss_req, &args);
-
+#endif
 	return DE_ERR_NONE;
 }
 
@@ -1535,8 +1620,10 @@ mono_de_ss_create (MonoInternalThread *thread, StepSize size, StepDepth depth, S
 void
 mono_de_set_log_level (int level, FILE *file)
 {
+#ifndef DISABLE_DEBUGGER	
 	log_level = level;
 	log_file = file;
+#endif	
 }
 
 /*
@@ -1547,6 +1634,7 @@ mono_de_set_log_level (int level, FILE *file)
 void
 mono_de_init (DebuggerEngineCallbacks *cbs)
 {
+#ifndef DISABLE_DEBUGGER	
 	rt_callbacks = *cbs;
 	mono_coop_mutex_init_recursive (&debug_mutex);
 
@@ -1554,22 +1642,27 @@ mono_de_init (DebuggerEngineCallbacks *cbs)
 	breakpoints_init ();
 
 	mono_debugger_log_init ();
+#endif	
 }
 
 void
 mono_de_cleanup (void)
 {
+#ifndef DISABLE_DEBUGGER	
 	breakpoints_cleanup ();
 	domains_cleanup ();
+#endif	
 }
 
 void
 mono_debugger_free_objref (gpointer value)
 {
+#ifndef DISABLE_DEBUGGER	
 	ObjRef *o = (ObjRef *)value;
 
 	mono_gchandle_free_internal (o->handle);
 
 	g_free (o);
+#endif	
 }
 #endif

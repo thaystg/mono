@@ -1555,11 +1555,24 @@ public class Tests : TestsBase, ITest2
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public void invoke_abort () {
+		teste_call_outro();
 	}
+	
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public void teste_call_outro () {
+		System.Console.WriteLine("cheguei em teste_call_outro");
+	}
+
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public void invoke_abort_2 () {
 		Thread.Sleep (1000000);
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public void invoke_abort_3 () {
+		System.Console.WriteLine("cheguei em invoke_abort_3");
+		//throw new Exception("teste");
 	}
 
 	public void invoke_return_void () {
