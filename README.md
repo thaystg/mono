@@ -575,30 +575,36 @@ Debug using VsCode
 =======================
 To debug managed code, use this extension: https://github.com/microsoft/vscode-mono-debug
 Example of launch.json to debug Managed Code using mono built from mono/mono:
-```{
+```
+{
 	"type": "mono",
         "request": "launch",
         "name": "mono-netcore",
         "program": "/Users/User/MyConsoleApp/MyConsoleApp.dll
-}```
+}
+```
 
 Example of launch.json to debug Managed Code using mono built from dotnet/runtime:
-```{
+```
+{
 	"type": "mono",
         "request": "launch",
         "name": "mono-netcore",
         "program": "/Users/User/MyConsoleApp/Debug/net5.0/MyConsoleApp.dll,
         "runtimeExecutable": "/Users/User/runtime/.dotnet-mono/dotnet"
-}```
+}
+```
 
 To debug native mono code, use this extension: https://github.com/vadimcn/vscode-lldb/
 Add a configuration: LLDB: Attach By Name and configure your launch.json like this:
-```{
+```
+{
 	"type": "lldb",
 	"request": "attach",
 	"name": "AttachToMonoNetcore",
 	"program": "/Users/User/runtime/.dotnet-mono/dotnet"
-}```
+}
+```
 
 It's possible to debug managed and native code using VsCode at same time, start the managed debugger using VSCodeMonoDebug extension and then attach using LLDB extension.
 
