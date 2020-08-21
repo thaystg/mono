@@ -574,6 +574,7 @@ the desired change in the commit hash.
 Debug using VsCode
 =======================
 To debug managed code, use this extension: https://github.com/microsoft/vscode-mono-debug
+
 Example of launch.json to debug Managed Code using mono built from mono/mono:
 ```
 {
@@ -596,6 +597,7 @@ Example of launch.json to debug Managed Code using mono built from dotnet/runtim
 ```
 
 To debug native mono code, use this extension: https://github.com/vadimcn/vscode-lldb/
+
 Add a configuration: LLDB: Attach By Name and configure your launch.json like this:
 ```
 {
